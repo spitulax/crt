@@ -6,6 +6,9 @@
 #include <string.h>
 #include <time.h>
 
+#define PROG_NAME "crt"
+#define PROG_VERSION "v0.1.1"
+
 #define return_defer(v)                                                                            \
     do {                                                                                           \
         result = (v);                                                                              \
@@ -33,6 +36,7 @@ typedef struct {
 
 void usage(const char *prog_name);
 int is_today(time_t timestamp);
+
 int count_fish(State *state);
 
 int main(int argc, char **argv) {
@@ -59,6 +63,9 @@ int main(int argc, char **argv) {
             if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
                 usage(argv[0]);
                 return_defer(EXIT_SUCCESS);
+            } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
+                printf(PROG_NAME " " PROG_VERSION "\n");
+                return_defer(EXIT_SUCCESS);
             } else if (strcmp(argv[1], "fish") == 0) {
                 config.shell = SHELL_FISH;
             } else {
@@ -79,7 +86,7 @@ int main(int argc, char **argv) {
         } break;
     }
 
-    const char *message = config.verbose ? "Number of commands run today: " : "";
+    const char *message = config.verbose ? "Commands run today: " : "";
     printf("%s%d\n", message, state.count);
 
 defer:
@@ -94,6 +101,7 @@ void usage(const char *prog_name) {
     printf("    fish\n");
     printf("Meta Options:\n");
     printf("    --help, -h          show help\n");
+    printf("    --version, -v       show version\n");
     printf("Options:\n");
     printf("    --verbose           show a message instead of just number\n");
 }
@@ -137,7 +145,6 @@ int is_today(time_t timestamp) {
 
 int count_fish(State *state) {
     int result = EXIT_SUCCESS;
-    int regex_ret = 0;
 
     // #ifndef NO_REGEX
     //     printf("Using regex\n");
@@ -180,9 +187,8 @@ int count_fish(State *state) {
 
     // Initialize pointers that points to the start of each lines
     size_t line_count = 0;
-    for (char *char_ptr = state->buffer; (char_ptr = strchr(char_ptr, '\n')) != NULL; ++char_ptr) {
+    for (char *char_ptr = state->buffer; (char_ptr = strchr(char_ptr, '\n')) != NULL; ++char_ptr)
         ++line_count;
-    }
     state->lines_ptr = malloc((line_count + 1) * sizeof(char *));
     if (state->lines_ptr == NULL) {
         fprintf(stderr, "Could not allocate lines pointer\n");
@@ -203,6 +209,7 @@ int count_fish(State *state) {
 
 #ifndef NO_REGEX
     regex_t regex;
+    int regex_ret = 0;
     const char *regex_pattern = "^  when:";
     regex_ret = regcomp(&regex, regex_pattern, REG_EXTENDED);
     if (regex_ret != 0) {
@@ -225,11 +232,12 @@ int count_fish(State *state) {
 #endif
             time_t time = atoi(line + 8);
             int today = is_today(time);
-            if (today) {
+            if (today)
                 ++state->count;
-            } else if (today == -1) {
+            else if (!today)
+                break;    // we break early because we know the following commands are not run today
+            else if (today == -1)
                 return_defer(EXIT_FAILURE);
-            }
         }
 #ifndef NO_REGEX
         else if (regex_ret != REG_NOMATCH) {

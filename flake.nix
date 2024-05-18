@@ -1,5 +1,5 @@
 {
-  description = "A C/C++ project";
+  description = "Commands Run Today";
 
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 

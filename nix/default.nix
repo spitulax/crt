@@ -2,9 +2,21 @@
 , lib
 , regex ? true
 }:
+let
+  version = with lib; removePrefix "v" (elemAt
+    (pipe (readFile ../src/main.c) [
+      (splitString "\n")
+      (filter (hasPrefix "#define PROG_VERSION"))
+      head
+      (splitString " ")
+      last
+      (splitString "\"")
+    ]) 1);
+
+in
 stdenv.mkDerivation {
   pname = "crt";
-  version = "0.1.0";
+  inherit version;
   src = lib.cleanSource ./..;
 
   buildInputs = [

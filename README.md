@@ -1,7 +1,7 @@
 <h1 align="center">Commands Run Today</h1>
 
 **C**ommands **R**un **T**oday
-is a command-line utility that counts the number of times you have run a command today
+is a 🚀 **blazing fast** 🚀 command-line utility that counts the number of times you have run a command today
 using shell history.
 
 ## Shell Supported
