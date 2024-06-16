@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -175,12 +174,6 @@ int is_today(time_t timestamp) {
 int count_fish(State *state) {
     int result = EXIT_SUCCESS;
 
-    // #ifndef NO_REGEX
-    //     printf("Using regex\n");
-    // #else
-    //     printf("Using strcmp\n");
-    // #endif
-
     const char *xdg_data_home = getenv("XDG_DATA_HOME");
     if (xdg_data_home == NULL) {
         fprintf(stderr, "XDG_DATA_HOME is not set\n");
@@ -235,29 +228,11 @@ int count_fish(State *state) {
         return_defer(EXIT_FAILURE);
     }
 
-#ifndef NO_REGEX
-    regex_t     regex;
-    int         regex_ret     = 0;
-    const char *regex_pattern = "^  when:";
-    regex_ret                 = regcomp(&regex, regex_pattern, REG_EXTENDED);
-    if (regex_ret != 0) {
-        char buf[100];
-        regerror(regex_ret, &regex, buf, sizeof(buf));
-        fprintf(stderr, "Could not compile regex: %s\n", buf);
-        return_defer(EXIT_FAILURE);
-    }
-#endif
-
     // We iterate from the last line up to quicken filtering
     // because fish stores new history to the bottom
     for (ssize_t i = line_count - 1; i >= 0; --i) {
         char *line = state->lines_ptr[i];
-#ifndef NO_REGEX
-        regex_ret = regexec(&regex, line, 0, NULL, 0);
-        if (regex_ret == 0) {
-#else
         if (strcmp(line, "  when: ") == 49) {
-#endif
             time_t time  = atoi(line + 8);
             int    today = is_today(time);
             if (today)
@@ -267,19 +242,8 @@ int count_fish(State *state) {
             else if (today == -1)
                 return_defer(EXIT_FAILURE);
         }
-#ifndef NO_REGEX
-        else if (regex_ret != REG_NOMATCH) {
-            char buf[100];
-            regerror(regex_ret, &regex, buf, sizeof(buf));
-            fprintf(stderr, "Regex match failed: %s\n", buf);
-            return_defer(EXIT_FAILURE);
-        }
-#endif
     }
 
 defer:
-#ifndef NO_REGEX
-    regfree(&regex);
-#endif
     return result;
 }

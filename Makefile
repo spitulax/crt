@@ -17,10 +17,6 @@ else
 	CPPFLAGS += -ggdb -Og
 endif
 
-ifeq ($(NO_REGEX),1)
-	CPPFLAGS += -DNO_REGEX
-endif
-
 # C specific flags
 CFLAGS +=
 
