@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-#define PROG_NAME "crt"
+#define PROG_NAME    "crt"
 #define PROG_VERSION "v0.1.1"
 
 #define return_defer(v)                                                                            \
@@ -20,69 +20,57 @@ typedef enum {
 } Shell;
 
 typedef struct {
-    int result;
-    FILE *hist_file;
-    char *buffer;
+    int    result;
+    FILE  *hist_file;
+    char  *buffer;
     char **lines_ptr;
-    int count;
+    int    count;
 } State;
 
 void state_free(State *self);
 
 typedef struct {
     Shell shell;
-    bool verbose;
+    bool  verbose;
 } Config;
 
-void usage(const char *prog_name);
-int is_today(time_t timestamp);
+typedef enum {
+    PARSE_ARGS_RESULT_FAILED,
+    PARSE_ARGS_RESULT_TERMINATE,
+    PARSE_ARGS_RESULT_SUCCESS,
+} ParseArgsResult;
+
+ParseArgsResult parse_args(Config *config, int argc, char **argv);
+void            usage();
+int             is_today(time_t timestamp);
 
 int count_fish(State *state);
 
 int main(int argc, char **argv) {
-    int result = EXIT_SUCCESS;
+    int           result = EXIT_SUCCESS;
     static Config config;
-    static State state = {
-        .result = EXIT_SUCCESS,
-        .hist_file = NULL,
-        .buffer = NULL,
-        .lines_ptr = NULL,
-        .count = 0,
+    static State  state = {
+         .result    = EXIT_SUCCESS,
+         .hist_file = NULL,
+         .buffer    = NULL,
+         .lines_ptr = NULL,
+         .count     = 0,
     };
 
-    switch (argc) {
-        case 3 : {
-            if (strcmp(argv[2], "--verbose") == 0) {
-                config.verbose = true;
-            } else {
-                usage(argv[0]);
-                return_defer(EXIT_FAILURE);
-            }
-        } break;
-        case 2 : {
-            if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
-                usage(argv[0]);
-                return_defer(EXIT_SUCCESS);
-            } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-                printf(PROG_NAME " " PROG_VERSION "\n");
-                return_defer(EXIT_SUCCESS);
-            } else if (strcmp(argv[1], "fish") == 0) {
-                config.shell = SHELL_FISH;
-            } else {
-                usage(argv[0]);
-                return_defer(EXIT_FAILURE);
-            }
-        } break;
-        default : {
-            usage(argv[0]);
-            return_defer(EXIT_FAILURE);
-        };
+    switch (parse_args(&config, argc, argv)) {
+        case PARSE_ARGS_RESULT_FAILED: {
+            usage();
+            return EXIT_FAILURE;
+        }
+        case PARSE_ARGS_RESULT_TERMINATE: {
+            return EXIT_SUCCESS;
+        }
+        case PARSE_ARGS_RESULT_SUCCESS: break;
     }
 
     switch (config.shell) {
-        case SHELL_FISH : {
-            if (count_fish(&state) == EXIT_FAILURE)
-                return_defer(EXIT_FAILURE);
+        case SHELL_FISH: {
+            if (count_fish(&state) == EXIT_FAILURE) return_defer(EXIT_FAILURE);
         } break;
     }
 
@@ -94,8 +82,52 @@ defer:
     return result;
 }
 
-void usage(const char *prog_name) {
-    printf("Usage: %s shell [options]\n", prog_name);
+const char *next_args(int *argc, char ***argv) {
+    if (*argc <= 0) {
+        *argv = NULL;
+        return NULL;
+    }
+    --(*argc);
+    const char *curr = **argv;
+    ++(*argv);
+    return curr;
+}
+
+ParseArgsResult parse_args(Config *config, int argc, char **argv) {
+    next_args(&argc, &argv);
+
+    const char *meta_arg = next_args(&argc, &argv);
+    if (meta_arg == NULL) return PARSE_ARGS_RESULT_FAILED;
+    if (strcmp(meta_arg, "-h") == 0 || strcmp(meta_arg, "--help") == 0) {
+        usage();
+        return PARSE_ARGS_RESULT_TERMINATE;
+    } else if (strcmp(meta_arg, "-v") == 0 || strcmp(meta_arg, "--version") == 0) {
+        printf(PROG_NAME " " PROG_VERSION "\n");
+        return PARSE_ARGS_RESULT_TERMINATE;
+    } else if (strcmp(meta_arg, "fish") == 0) {
+        config->shell = SHELL_FISH;
+    } else {
+        return PARSE_ARGS_RESULT_FAILED;
+    }
+
+    while (true) {
+        const char *arg = next_args(&argc, &argv);
+        if (arg == NULL) break;
+
+        if (strcmp(arg, "--verbose") == 0) {
+            config->verbose = true;
+        } else {
+            return PARSE_ARGS_RESULT_FAILED;
+        }
+    }
+
+    if (argc != 0) return PARSE_ARGS_RESULT_FAILED;
+
+    return PARSE_ARGS_RESULT_SUCCESS;
+}
+
+void usage() {
+    printf("Usage: %s shell [options]\n", PROG_NAME);
     printf("\n");
     printf("Shells:\n");
     printf("    fish\n");
@@ -107,12 +139,9 @@ void usage(const char *prog_name) {
 }
 
 void state_free(State *self) {
-    if (self->hist_file != NULL)
-        fclose(self->hist_file);
-    if (self->buffer != NULL)
-        free(self->buffer);
-    if (self->lines_ptr != NULL)
-        free(self->lines_ptr);
+    if (self->hist_file != NULL) fclose(self->hist_file);
+    if (self->buffer != NULL) free(self->buffer);
+    if (self->lines_ptr != NULL) free(self->lines_ptr);
 }
 
 int is_today(time_t timestamp) {
@@ -129,16 +158,16 @@ int is_today(time_t timestamp) {
     }
 
     struct tm day_start_tm = now_tm;
-    day_start_tm.tm_hour = 0;
-    day_start_tm.tm_min = 0;
-    day_start_tm.tm_sec = 0;
-    time_t day_start = mktime(&day_start_tm);
+    day_start_tm.tm_hour   = 0;
+    day_start_tm.tm_min    = 0;
+    day_start_tm.tm_sec    = 0;
+    time_t day_start       = mktime(&day_start_tm);
 
     struct tm day_end_tm = now_tm;
-    day_end_tm.tm_hour = 23;
-    day_end_tm.tm_min = 59;
-    day_end_tm.tm_sec = 59;
-    time_t day_end = mktime(&day_end_tm);
+    day_end_tm.tm_hour   = 23;
+    day_end_tm.tm_min    = 59;
+    day_end_tm.tm_sec    = 59;
+    time_t day_end       = mktime(&day_end_tm);
 
     return (timestamp >= day_start && timestamp <= day_end);
 }
@@ -160,8 +189,8 @@ int count_fish(State *state) {
         return EXIT_FAILURE;
     }
     const char *fish_hist_path = "fish/fish_history";
-    int path_size = snprintf(NULL, 0, "%s/%s", xdg_data_home, fish_hist_path);
-    char path[path_size + 1];
+    int         path_size      = snprintf(NULL, 0, "%s/%s", xdg_data_home, fish_hist_path);
+    char        path[path_size + 1];
     snprintf(path, path_size + 1, "%s/%s", xdg_data_home, fish_hist_path);
     state->hist_file = fopen(path, "r");
     if (state->hist_file == NULL) {
@@ -194,13 +223,12 @@ int count_fish(State *state) {
         fprintf(stderr, "Could not allocate lines pointer\n");
         return_defer(EXIT_FAILURE);
     }
-    size_t index = 0;
+    size_t index              = 0;
     state->lines_ptr[index++] = state->buffer;
     for (char *char_ptr = state->buffer; (char_ptr = strchr(char_ptr, '\n')) != NULL;) {
         *char_ptr = '\0';
         ++char_ptr;
-        if (*char_ptr != '\0')
-            state->lines_ptr[index++] = char_ptr;
+        if (*char_ptr != '\0') state->lines_ptr[index++] = char_ptr;
     }
     if (index != line_count) {
         fprintf(stderr, "Somehow the line counting was broken\n");
@@ -208,10 +236,10 @@ int count_fish(State *state) {
     }
 
 #ifndef NO_REGEX
-    regex_t regex;
-    int regex_ret = 0;
+    regex_t     regex;
+    int         regex_ret     = 0;
     const char *regex_pattern = "^  when:";
-    regex_ret = regcomp(&regex, regex_pattern, REG_EXTENDED);
+    regex_ret                 = regcomp(&regex, regex_pattern, REG_EXTENDED);
     if (regex_ret != 0) {
         char buf[100];
         regerror(regex_ret, &regex, buf, sizeof(buf));
@@ -230,8 +258,8 @@ int count_fish(State *state) {
 #else
         if (strcmp(line, "  when: ") == 49) {
 #endif
-            time_t time = atoi(line + 8);
-            int today = is_today(time);
+            time_t time  = atoi(line + 8);
+            int    today = is_today(time);
             if (today)
                 ++state->count;
             else if (!today)
