@@ -1,5 +1,6 @@
 { self, lib, inputs }: {
-  default = final: prev: {
-    crt = final.callPackage ./default.nix { regex = true; };
+  default = final: prev: rec {
+    crt = final.callPackage ./default.nix { };
+    crt-debug = crt.override { debug = true; };
   };
 }

@@ -1,4 +1,6 @@
-#include <errno.h>
+#define MEMPLUS_IMPLEMENTATION
+#include "memplus.h"
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,19 +8,8 @@
 #include <time.h>
 
 #include "fish.h"
+#include "prog.h"
 #include "utils.h"
-
-#define PROG_NAME    "crt"
-#define PROG_VERSION "v0.1.1"
-
-typedef enum {
-    SHELL_FISH
-} Shell;
-
-typedef struct {
-    Shell shell;
-    bool  verbose;
-} Config;
 
 typedef enum {
     PARSE_ARGS_RESULT_FAILED,
@@ -26,35 +17,70 @@ typedef enum {
     PARSE_ARGS_RESULT_SUCCESS,
 } ParseArgsResult;
 
-ParseArgsResult parse_args(Config *config, int argc, char **argv);
-void            usage();
+ParseArgsResult parse_args(Prog *prog, int argc, char **argv);
+void            usage(void);
 
 int main(int argc, char **argv) {
-    static Config config;
+    int      result = EXIT_SUCCESS;
+    mp_Arena arena;
+    mp_arena_init(&arena);
+    mp_Allocator alloc = mp_arena_allocator(&arena);
 
-    switch (parse_args(&config, argc, argv)) {
+    static Prog prog = { 0 };
+    prog.alloc       = &alloc;
+
+    switch (parse_args(&prog, argc, argv)) {
         case PARSE_ARGS_RESULT_FAILED: {
             usage();
-            return EXIT_FAILURE;
+            return_defer(EXIT_FAILURE);
         }
         case PARSE_ARGS_RESULT_TERMINATE: {
-            return EXIT_SUCCESS;
+            return_defer(EXIT_SUCCESS);
         }
         case PARSE_ARGS_RESULT_SUCCESS: break;
     }
 
-    int count;
-    switch (config.shell) {
+    const char *home_dir = getenv("HOME");
+    if (home_dir == NULL) {
+        eprintfln("%s", "$HOME is not set");
+        return -1;
+    }
+
+    const char *xdg_data_home_cstr = getenv("XDG_DATA_HOME");
+    if (xdg_data_home_cstr == NULL) {
+        prog.xdg_data_home = mp_string_newf(prog.alloc, "%s/.local/share", home_dir);
+    } else {
+        prog.xdg_data_home = mp_string_new(prog.alloc, xdg_data_home_cstr);
+    }
+
+    const char *xdg_cache_home_cstr = getenv("XDG_CACHE_HOME");
+    if (xdg_cache_home_cstr == NULL) {
+        prog.xdg_cache_home = mp_string_newf(prog.alloc, "%s/.cache", home_dir);
+    } else {
+        prog.xdg_cache_home = mp_string_new(prog.alloc, xdg_cache_home_cstr);
+    }
+
+#ifdef DEBUG
+    if (prog.test) {
+        printf("Nothing's here, yet\n");
+        return_defer(EXIT_SUCCESS);
+    }
+#endif
+
+    int count = 0;
+    switch (prog.shell) {
         case SHELL_FISH: {
-            count = count_fish();
+            count = count_fish(&prog);
         } break;
     }
-    if (count < 0) return EXIT_FAILURE;
+    if (count < 0) return_defer(EXIT_FAILURE);
 
-    const char *message = config.verbose ? "Commands run today: " : "";
-    printf("%s%d\n", message, count);
+    /*const char *message = prog.verbose ? "Commands run today: " : "";*/
+    /*printf("%s%d\n", message, count);*/
 
-    return EXIT_SUCCESS;
+defer:
+    mp_arena_destroy(&arena);
+    return result;
 }
 
 const char *next_args(int *argc, char ***argv) {
@@ -68,7 +94,7 @@ const char *next_args(int *argc, char ***argv) {
     return curr;
 }
 
-ParseArgsResult parse_args(Config *config, int argc, char **argv) {
+ParseArgsResult parse_args(Prog *prog, int argc, char **argv) {
     next_args(&argc, &argv);
 
     const char *meta_arg = next_args(&argc, &argv);
@@ -80,7 +106,11 @@ ParseArgsResult parse_args(Config *config, int argc, char **argv) {
         printf(PROG_NAME " " PROG_VERSION "\n");
         return PARSE_ARGS_RESULT_TERMINATE;
     } else if (strcmp(meta_arg, "fish") == 0) {
-        config->shell = SHELL_FISH;
+        prog->shell = SHELL_FISH;
+#ifdef DEBUG
+    } else if (strcmp(meta_arg, "test") == 0) {
+        prog->test = true;
+#endif
     } else {
         return PARSE_ARGS_RESULT_FAILED;
     }
@@ -90,7 +120,7 @@ ParseArgsResult parse_args(Config *config, int argc, char **argv) {
         if (arg == NULL) break;
 
         if (strcmp(arg, "--verbose") == 0) {
-            config->verbose = true;
+            prog->verbose = true;
         } else {
             return PARSE_ARGS_RESULT_FAILED;
         }
@@ -101,7 +131,7 @@ ParseArgsResult parse_args(Config *config, int argc, char **argv) {
     return PARSE_ARGS_RESULT_SUCCESS;
 }
 
-void usage() {
+void usage(void) {
     printf("Usage: %s shell [options]\n", PROG_NAME);
     printf("\n");
     printf("Shells:\n");

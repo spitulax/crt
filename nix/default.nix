@@ -1,27 +1,36 @@
 { stdenv
 , lib
-, regex ? true
+, meson
+, ninja
+, pkg-config
+
+, debug ? false
 }:
 let
-  version = with lib; removePrefix "v" (elemAt
-    (pipe (readFile ../src/main.c) [
+  version = with lib; elemAt
+    (pipe (readFile ../meson.build) [
       (splitString "\n")
-      (filter (hasPrefix "#define PROG_VERSION"))
+      (filter (hasPrefix "  version : "))
       head
-      (splitString " ")
+      (splitString " : ")
       last
-      (splitString "\"")
-    ]) 1);
-
+      (splitString "'")
+    ]) 1;
 in
 stdenv.mkDerivation {
   pname = "crt";
   inherit version;
   src = lib.cleanSource ./..;
 
+  nativeBuildInputs = [
+    meson
+    ninja
+    pkg-config
+  ];
+
   buildInputs = [
 
   ];
 
-  makeFlags = [ "PREFIX=$(out)" "RELEASE=1" ] ++ lib.optionals (!regex) [ "NO_REGEX=1" ];
+  mesonBuildType = if debug then "debug" else "release";
 }
