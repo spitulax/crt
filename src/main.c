@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include "atuin.h"
 #include "fish.h"
 #include "prog.h"
 #include "utils.h"
@@ -75,6 +76,9 @@ int main(int argc, char **argv) {
         case SHELL_FISH: {
             count = count_fish(&prog);
         } break;
+        case SHELL_ATUIN: {
+            count = count_atuin(&prog);
+        } break;
         case SHELL_COUNT: {
             assert(0 && "unreachable");
         } break;
@@ -113,6 +117,8 @@ ParseArgsResult parse_args(Prog *prog, int argc, char **argv) {
         return PARSE_ARGS_RESULT_TERMINATE;
     } else if (strcmp(meta_arg, "fish") == 0) {
         prog->shell = SHELL_FISH;
+    } else if (strcmp(meta_arg, "atuin") == 0) {
+        prog->shell = SHELL_ATUIN;
 #ifdef DEBUG
     } else if (strcmp(meta_arg, "test") == 0) {
         prog->test = true;

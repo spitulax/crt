@@ -12,7 +12,8 @@
 #include <unistd.h>
 
 static const char *shell_names[] = {
-    [SHELL_FISH] = "fish",
+    [SHELL_FISH]  = "fish",
+    [SHELL_ATUIN] = "atuin",
 };
 
 int is_today(time_t timestamp) {
