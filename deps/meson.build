@@ -5,6 +5,9 @@ sqlite3 = declare_dependency(
   include_directories : include_directories('sqlite3'),
 )
 
+math = cc.find_library('m')
+
 deps = [
-  sqlite3
+  math,
+  sqlite3,
 ]

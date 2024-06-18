@@ -28,9 +28,10 @@ stdenv.mkDerivation {
     pkg-config
   ];
 
-  buildInputs = [
-
-  ];
+  preConfigure = ''
+    patchShebangs ./deps/build.sh
+    ./deps/build.sh
+  '';
 
   mesonBuildType = if debug then "debug" else "release";
 }

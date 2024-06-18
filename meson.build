@@ -1,7 +1,7 @@
 project(
   'crt',
   'c', 'cpp',
-  version : '0.1.1',
+  version : '0.2.0',
   license: 'MIT',
   default_options : [
     'c_std=c11',
@@ -23,9 +23,6 @@ add_project_arguments('-Wshadow -Wnon-virtual-dtor', language: 'cpp')
 
 subdir('deps')
 subdir('src')
-
-lm = cc.find_library('m')
-deps += lm
 
 include = [
   'src',

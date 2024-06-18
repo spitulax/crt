@@ -5,26 +5,39 @@ is a 🚀 **blazing fast** 🚀 command-line utility that counts the number of t
 using shell history.
 
 ## Shell Supported
+- [Atuin](https://github.com/atuinsh/atuin)
 - [Fish](https://fishshell.com)
 
 ## Usage
 
-```bash
-crt --help
+Crt must be executed at the first time user logs into the interactive shell on the current day to sync the crt database with your shell history.
+The easiest method to ensure this is to execute crt on your shell startup script.
+If you are not planning to use this often you can add the flag `--update` which will sync the crt database but it's slower.
+
+```console
+# Place in your shell startup script
+$ crt <your shell>
 ```
 
 ## Building
 
 ### Nix (Flake)
 
-```bash
-nix build
-./result/bin/crt --help
+```console
+$ nix build
+$ ./result/bin/crt --help
 ```
 
 ### Other
 
-```bash
-make RELEASE=1
-make RELEASE=1 install # Put the binary to ~/.local/bin
+```console
+$ ./deps/build.sh && meson setup build && meson compile -C build
+$ ./build/crt --help
 ```
+
+## Note
+
+The way I build the sqlite3 library is kind of hacky, and it gets even hackier in the nix package declaration.
+I tried to get meson to build it I just can't get it to work. I literally just want to run a couple of shell commands.
+I've tried some solutions, most of them don't work and some of them that do are not less janky than this.
+~Every single build system is like turing complete, yet some should-be-trivial tasks are just made unnecessarily convoluted.~

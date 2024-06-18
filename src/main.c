@@ -150,11 +150,11 @@ void usage(void) {
     printf("\n");
     printf("Shells:\n");
     printf("    fish\n");
+    printf("    atuin\n");
     printf("Meta Options:\n");
     printf("    --help, -h          show help\n");
     printf("    --version, -v       show version\n");
     printf("Options:\n");
-    // TODO:
-    printf("    --update           show a message instead of just number\n");
+    printf("    --update            sync the crt database with shell history\n");
     printf("    --verbose           show a message instead of just number\n");
 }
