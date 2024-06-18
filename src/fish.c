@@ -1,18 +1,17 @@
 #include "fish.h"
 #include "memplus.h"
+#include "prog.h"
 #include "utils.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int count_fish(Prog *prog) {
-    int result = 0;
+mp_vector_create(Lines, char *);
 
+int count_fish(Prog *prog) {
     const char *hist_name = getenv("fish_history");
-    if (hist_name == NULL) {
-        hist_name = "fish";
-    }
+    if (hist_name == NULL) hist_name = "fish";
 
     mp_String hist_path =
         mp_string_newf(prog->alloc, "%s/fish/%s_history", prog->xdg_data_home.cstr, hist_name);
@@ -23,81 +22,30 @@ int count_fish(Prog *prog) {
         return -1;
     }
 
-    printf("%zu\n", file_content.size);
+    Lines lines;
+    mp_vector_init(&lines, prog->alloc);
+    char *char_ptr = file_content.cstr;
+    for (;;) {
+        if (*char_ptr != '\0') mp_append(&lines, char_ptr);
+        char_ptr = strchr(char_ptr, '\n');
+        if (char_ptr == NULL) break;
+        *char_ptr = '\0';
+        ++char_ptr;
+    }
 
-    return result;
+    int count = 0;
+    for (size_t i = 0; i < lines.size; ++i) {
+        if (strcmp(mp_get(lines, i), "- cmd: ") > 0) ++count;
+    }
+
+    time_t db_last_updated = 0;
+    int    db_count        = 0;
+    if (!read_db(prog, SHELL_FISH, &db_last_updated, &db_count, true) ||
+        !is_today(db_last_updated) || prog->update) {
+        if (!write_db(prog, SHELL_FISH, time(NULL), count)) return -1;
+    }
+    if (!read_db(prog, SHELL_FISH, &db_last_updated, &db_count, false)) return -1;
+    printfln("%d, %d", count, db_count);
+
+    return count - db_count;
 }
-
-/*int count_fish() {*/
-/*    int    result      = 0;*/
-/*    FILE  *hist_file   = NULL;*/
-/*    char  *buffer      = NULL;*/
-/*    char **lines_array = NULL;*/
-/**/
-/*    const char *xdg_data_home  = getenv("XDG_DATA_HOME");*/
-/*    const char *fish_hist_path = "fish/fish_history";*/
-/*    int         path_size      = snprintf(NULL, 0, "%s/%s", xdg_data_home, fish_hist_path);*/
-/*    char        path[path_size + 1];*/
-/*    snprintf(path, path_size + 1, "%s/%s", xdg_data_home, fish_hist_path);*/
-/*    hist_file = fopen(path, "r");*/
-/*    if (hist_file == NULL) {*/
-/*        fprintf(stderr, "[WARNING] Could not open %s: %s\n", fish_hist_path, strerror(errno));*/
-/*        return_defer(0);*/
-/*    }*/
-/**/
-/*    fseek(hist_file, 0, SEEK_END);*/
-/*    size_t hist_size = ftell(hist_file);*/
-/*    fseek(hist_file, 0, SEEK_SET);*/
-/*    buffer = malloc(hist_size + 1);*/
-/*    if (buffer == NULL) {*/
-/*        fprintf(stderr, "Could not allocate buffer for the file content\n");*/
-/*        return_defer(-1);*/
-/*    }*/
-/**/
-/*    size_t bytes_read = fread(buffer, 1, hist_size, hist_file);*/
-/*    if (bytes_read != hist_size || ferror(hist_file) != 0) {*/
-/*        fprintf(stderr, "Could not read %s\n", fish_hist_path);*/
-/*        return_defer(-1);*/
-/*    }*/
-/*    buffer[hist_size] = '\0';*/
-/**/
-/*    // Initialize pointers that points to the start of each lines*/
-/*    size_t line_count = 0;*/
-/*    for (char *char_ptr = buffer; (char_ptr = strchr(char_ptr, '\n')) != NULL; ++char_ptr)*/
-/*        ++line_count;*/
-/*    lines_array          = malloc((line_count + 1) * sizeof(char *));*/
-/*    size_t index         = 0;*/
-/*    lines_array[index++] = buffer;*/
-/*    for (char *char_ptr = buffer; (char_ptr = strchr(char_ptr, '\n')) != NULL;) {*/
-/*        *char_ptr = '\0';*/
-/*        ++char_ptr;*/
-/*        if (*char_ptr != '\0') lines_array[index++] = char_ptr;*/
-/*    }*/
-/*    if (index != line_count) {*/
-/*        fprintf(stderr, "Somehow the line counting was broken\n");*/
-/*        return_defer(-1);*/
-/*    }*/
-/**/
-/*    // We iterate from the last line up to quicken filtering*/
-/*    // because fish stores new history to the bottom*/
-/*    for (ssize_t i = line_count - 1; i >= 0; --i) {*/
-/*        char *line = lines_array[i];*/
-/*        if (strcmp(line, "  when: ") == 49) {*/
-/*            time_t time  = atoi(line + 8);*/
-/*            int    today = is_today(time);*/
-/*            if (today)*/
-/*                ++result;*/
-/*            else if (!today)*/
-/*                break;    // we break early because we know the following commands are not run
- * today*/
-/*            else if (today == -1)*/
-/*                return_defer(EXIT_FAILURE);*/
-/*        }*/
-/*    }*/
-/**/
-/*defer:*/
-/*    free(lines_array);*/
-/*    free(buffer);*/
-/*    if (hist_file != NULL) fclose(hist_file);*/
-/*    return result;*/
-/*}*/

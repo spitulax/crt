@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include "fish.h"
@@ -50,14 +51,16 @@ int main(int argc, char **argv) {
     if (xdg_data_home_cstr == NULL) {
         prog.xdg_data_home = mp_string_newf(prog.alloc, "%s/.local/share", home_dir);
     } else {
-        prog.xdg_data_home = mp_string_new(prog.alloc, xdg_data_home_cstr);
+        prog.xdg_data_home = mp_string_newf(prog.alloc, "%s", xdg_data_home_cstr);
     }
-
-    const char *xdg_cache_home_cstr = getenv("XDG_CACHE_HOME");
-    if (xdg_cache_home_cstr == NULL) {
-        prog.xdg_cache_home = mp_string_newf(prog.alloc, "%s/.cache", home_dir);
-    } else {
-        prog.xdg_cache_home = mp_string_new(prog.alloc, xdg_cache_home_cstr);
+    prog.data_home = mp_string_newf(prog.alloc, "%s/" DB_DIR, prog.xdg_data_home.cstr);
+    struct stat dir_stat;
+    if (stat(prog.data_home.cstr, &dir_stat)) {
+        const char *cmd = mp_string_newf(prog.alloc, "mkdir -p %s", prog.data_home.cstr).cstr;
+        if (system(cmd) != 0) {
+            eprintfln("Failed to create directory %s", prog.data_home.cstr);
+            return_defer(EXIT_FAILURE);
+        }
     }
 
 #ifdef DEBUG
@@ -72,11 +75,14 @@ int main(int argc, char **argv) {
         case SHELL_FISH: {
             count = count_fish(&prog);
         } break;
+        case SHELL_COUNT: {
+            assert(0 && "unreachable");
+        } break;
     }
     if (count < 0) return_defer(EXIT_FAILURE);
 
-    /*const char *message = prog.verbose ? "Commands run today: " : "";*/
-    /*printf("%s%d\n", message, count);*/
+    const char *message = prog.verbose ? "Commands run today: " : "";
+    printf("%s%d\n", message, count);
 
 defer:
     mp_arena_destroy(&arena);
@@ -121,6 +127,8 @@ ParseArgsResult parse_args(Prog *prog, int argc, char **argv) {
 
         if (strcmp(arg, "--verbose") == 0) {
             prog->verbose = true;
+        } else if (strcmp(arg, "--update") == 0) {
+            prog->update = true;
         } else {
             return PARSE_ARGS_RESULT_FAILED;
         }
@@ -140,5 +148,7 @@ void usage(void) {
     printf("    --help, -h          show help\n");
     printf("    --version, -v       show version\n");
     printf("Options:\n");
+    // TODO:
+    printf("    --update           show a message instead of just number\n");
     printf("    --verbose           show a message instead of just number\n");
 }

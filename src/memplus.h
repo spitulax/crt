@@ -263,9 +263,9 @@ void mp_string_destroy(const mp_Allocator *allocator, mp_String *str);
 // TOOO: make these functions apply to other data structures later
 
 /* Gets an item at index `i`. */
-// self: Vector*
+// self: Vector
 // i: size_t
-#define mp_get(self, i) (self)->data[i]
+#define mp_get(self, i) (self).data[i]
 
 /* Resizes vector to `offset` of the current size.
  * If the current capacity is 0, allocates for `MP_VECTOR_INIT_CAPACITY` items.
@@ -278,14 +278,17 @@ void mp_string_destroy(const mp_Allocator *allocator, mp_String *str);
 #define mp_resize(self, offset)                                                                    \
     do {                                                                                           \
         if ((self)->size + (offset) > (self)->capacity && (offset) > 0) {                          \
+            size_t old_capacity = (self)->capacity;                                                \
             if ((self)->capacity == 0) {                                                           \
                 (self)->capacity = MP_VECTOR_INIT_CAPACITY;                                        \
             }                                                                                      \
             while ((self)->size + (offset) > (self)->capacity) {                                   \
                 (self)->capacity *= 2;                                                             \
             }                                                                                      \
-            (self)->data = mp_realloc(                                                             \
-                (self)->alloc, (self)->data, 0, (self)->capacity * sizeof(*(self)->data));         \
+            (self)->data = mp_realloc((self)->alloc,                                               \
+                                      (self)->data,                                                \
+                                      old_capacity * sizeof(*(self)->data),                        \
+                                      (self)->capacity * sizeof(*(self)->data));                   \
         }                                                                                          \
         if ((self)->data != NULL)                                                                  \
             (self)->size += (offset);                                                              \

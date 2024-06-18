@@ -1,13 +1,19 @@
 #include "utils.h"
 #include "memplus.h"
+#include "prog.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+static const char *shell_names[] = {
+    [SHELL_FISH] = "fish",
+};
 
 int is_today(time_t timestamp) {
     time_t now = time(NULL);
@@ -17,9 +23,8 @@ int is_today(time_t timestamp) {
     }
 
     struct tm *day_start_tm = localtime(&now);
-    struct tm *day_end_tm   = localtime(&now);
-    if (day_start_tm == NULL || day_end_tm == NULL) {
-        eprintfln("Could not convert to localtime: %s\n", strerror(errno));
+    if (day_start_tm == NULL) {
+        eprintfln("Could not convert to localtime: %s", strerror(errno));
         return -1;
     }
 
@@ -28,64 +33,138 @@ int is_today(time_t timestamp) {
     day_start_tm->tm_sec  = 0;
     time_t day_start      = mktime(day_start_tm);
 
-    day_end_tm->tm_hour = 23;
-    day_end_tm->tm_min  = 59;
-    day_end_tm->tm_sec  = 59;
-    time_t day_end      = mktime(day_end_tm);
-
-    return (timestamp >= day_start && timestamp <= day_end);
+    return timestamp >= day_start;
 }
 
-bool run_cmd_stdout(mp_Allocator *alloc, mp_String *output, const char *cmd) {
-    bool result = true;
+bool write_db(Prog *prog, Shell shell, time_t last_updated, int count) {
+    bool          result  = true;
+    sqlite3      *db      = NULL;
+    sqlite3_stmt *stmt    = NULL;
+    mp_String     db_path = mp_string_newf(prog->alloc, "%s/" DB_FILENAME, prog->data_home.cstr);
 
-    int pipe_fd[2];
-    int read_pipe  = -1;
-    int write_pipe = -1;
-    int dev_null   = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0222);
-
-    if (pipe(pipe_fd) == -1) {
-        eprintfln("run_cmd: Failed to create pipes: %s", strerror(errno));
+    if (sqlite3_open_v2(db_path.cstr, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) !=
+        SQLITE_OK) {
+        eprintfln("Failed to open sqlite3 database %s: %s", db_path.cstr, sqlite3_errmsg(db));
         return_defer(false);
     }
-    read_pipe  = pipe_fd[0];
-    write_pipe = pipe_fd[1];
 
-    pid_t pid = fork();
-    if (pid == -1) {
-        eprintfln("run_cmd: Failed to fork child process: %s", strerror(errno));
-        return_defer(false);
-    } else if (pid == 0) {
-        close(read_pipe);
-        dup2(write_pipe, STDOUT_FILENO);
-        dup2(dev_null, STDERR_FILENO);
-        close(write_pipe);
-        close(dev_null);
-        execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
-        eprintfln("run_cmd: Failed not run `%s`: %s", cmd, strerror(errno));
-        exit(EXIT_FAILURE);
-    } else {
-        int status;
-        if (waitpid(pid, &status, 0) == -1) {
-            eprintfln("run_cmd: `%s` could not terminate: %s", cmd, strerror(errno));
+    mp_String statements[] = {
+        mp_string_new(prog->alloc,
+                      "CREATE TABLE IF NOT EXISTS shells (\n"
+                      "   name TEXT PRIMARY KEY,\n"
+                      "   last_updated INTEGER NOT NULL,\n"
+                      "   count INTEGER NOT NULL\n"
+                      ");"),
+        mp_string_newf(prog->alloc,
+                       "REPLACE INTO shells (name, last_updated, count)\n"
+                       "VALUES ('%s', %ld, %d);",
+                       shell_names[shell],
+                       last_updated,
+                       count),
+    };
+
+    for (size_t i = 0; i < sizeof(statements) / sizeof(*statements); ++i) {
+        mp_String *statement = &statements[i];
+
+        if (sqlite3_prepare_v2(db, statement->cstr, statement->size, &stmt, NULL) != SQLITE_OK) {
+            eprintfln("Failed to compile SQL statements: %s", sqlite3_errmsg(db));
             return_defer(false);
         }
 
-        // NOTE: we don't give an f about what's in stderr
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) return_defer(false);
+        int  ret;
+        bool error = false;
+        while ((ret = sqlite3_step(stmt)) != SQLITE_DONE) {
+            switch (ret) {
+                case SQLITE_ROW: {
+                } break;
+                case SQLITE_ERROR: {
+                    eprintfln("SQLITE_ERROR: %s", sqlite3_errmsg(db));
+                    error = true;
+                } break;
+                case SQLITE_MISUSE: {
+                    eprintfln("%s", "SQLITE_MISUSE");
+                    error = true;
+                } break;
+                case SQLITE_BUSY: {
+                    eprintfln("%s", "SQLITE_BUSY");
+                    error = true;
+                } break;
+                default: break;
+            }
+            if (error) break;
+        }
 
-        char    output_cstr[1024];
-        ssize_t bytes_read      = read(read_pipe, output_cstr, sizeof(output_cstr) - 1);
-        output_cstr[bytes_read] = '\0';
-        *output                 = mp_string_new(alloc, output_cstr);
-        return_defer(true);
+        if (sqlite3_finalize(stmt) != SQLITE_OK) {
+            eprintfln("Failed to finalize sqlite3 prepared statement for %s: %s",
+                      db_path.cstr,
+                      sqlite3_errmsg(db));
+            return_defer(false);
+        };
+        if (error) return_defer(false);
+    }
+
+
+defer:
+    if (sqlite3_close(db) != SQLITE_OK) {
+        eprintfln("Failed to close sqlite3 database %s", db_path.cstr);
+        return_defer(false);
+    }
+    return result;
+}
+
+bool read_db(Prog *prog, Shell shell, time_t *out_last_updated, int *out_count, bool check_only) {
+    bool          result  = true;
+    sqlite3      *db      = NULL;
+    sqlite3_stmt *stmt    = NULL;
+    mp_String     db_path = mp_string_newf(prog->alloc, "%s/" DB_FILENAME, prog->data_home.cstr);
+
+    if (sqlite3_open_v2(db_path.cstr, &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+        if (!check_only)
+            eprintfln("Failed to open sqlite3 database %s: %s", db_path.cstr, sqlite3_errmsg(db));
+        return_defer(false);
+    }
+
+    mp_String statements =
+        mp_string_newf(prog->alloc, "SELECT * FROM shells WHERE name='%s';", shell_names[shell]);
+
+    if (sqlite3_prepare_v2(db, statements.cstr, statements.size, &stmt, NULL) != SQLITE_OK) {
+        eprintfln("Failed to compile SQL statements: %s", sqlite3_errmsg(db));
+        return_defer(false);
+    }
+
+    int ret;
+    while ((ret = sqlite3_step(stmt)) != SQLITE_DONE) {
+        switch (ret) {
+            case SQLITE_ROW: {
+                *out_last_updated = sqlite3_column_int64(stmt, 1);
+                *out_count        = sqlite3_column_int(stmt, 2);
+            } break;
+            case SQLITE_ERROR: {
+                eprintfln("SQLITE_ERROR: %s", sqlite3_errmsg(db));
+                return_defer(false);
+            } break;
+            case SQLITE_MISUSE: {
+                eprintfln("%s", "SQLITE_MISUSE");
+                return_defer(false);
+            } break;
+            case SQLITE_BUSY: {
+                eprintfln("%s", "SQLITE_BUSY");
+                return_defer(false);
+            } break;
+            default: break;
+        }
     }
 
 defer:
-    if (read_pipe != -1 || write_pipe != -1) {
-        close(read_pipe);
-        close(write_pipe);
+    if (sqlite3_finalize(stmt) != SQLITE_OK) {
+        eprintfln("Failed to finalize sqlite3 prepared statement for %s: %s",
+                  db_path.cstr,
+                  sqlite3_errmsg(db));
+        return_defer(false);
     };
-    if (dev_null != -1) close(dev_null);
+    if (sqlite3_close(db) != SQLITE_OK) {
+        eprintfln("Failed to close sqlite3 database %s", db_path.cstr);
+        return_defer(false);
+    }
     return result;
 }

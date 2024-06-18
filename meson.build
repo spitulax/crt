@@ -21,8 +21,11 @@ add_project_arguments('-DPROG_NAME="' + meson.project_name() + '"', language: ['
 add_project_arguments('-DPROG_VERSION="' + meson.project_version() + '"', language: ['c', 'cpp'])
 add_project_arguments('-Wshadow -Wnon-virtual-dtor', language: 'cpp')
 
-# subdir('deps')
+subdir('deps')
 subdir('src')
+
+lm = cc.find_library('m')
+deps += lm
 
 include = [
   'src',
@@ -32,6 +35,6 @@ executable(
   'crt',
   src,
   include_directories : include,
-  # dependencies : deps,
+  dependencies : deps,
   install : true
 )
