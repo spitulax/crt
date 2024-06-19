@@ -1,7 +1,6 @@
 #include "atuin.h"
 #include "memplus.h"
 #include "utils.h"
-#include <errno.h>
 #include <sqlite3.h>
 
 int count_atuin(Prog *prog) {
@@ -60,33 +59,7 @@ int count_atuin(Prog *prog) {
 
     if (prog->update) past_count += count;
 
-    time_t db_last_updated = 0;
-    int    db_count        = 0;
-    time_t now             = time(NULL);
-    if (prog->update) {
-        struct tm *day_start_tm = localtime(&now);
-        if (day_start_tm == NULL) {
-            eprintfln("Could not convert to localtime: %s", strerror(errno));
-            return -1;
-        }
-        day_start_tm->tm_hour = 0;
-        day_start_tm->tm_min  = 0;
-        day_start_tm->tm_sec  = 0;
-        time_t day_start      = mktime(day_start_tm);
-        if (!write_db(prog, SHELL_ATUIN, day_start, past_count)) return -1;
-    } else {
-        if (!read_db(prog, SHELL_ATUIN, &db_last_updated, &db_count, true)) {
-            int today = is_today(db_last_updated);
-            if (!today) {
-                if (!write_db(prog, SHELL_ATUIN, now, count)) return -1;
-            } else if (today < 0) {
-                return -1;
-            }
-        }
-    }
-    if (!read_db(prog, SHELL_ATUIN, &db_last_updated, &db_count, false)) return -1;
-    result = count - db_count;
-    return_defer((result >= 0) ? result : 0);
+    return_defer(final_count(prog, count, past_count));
 
 defer:
     if (sqlite3_finalize(stmt) != SQLITE_OK) {

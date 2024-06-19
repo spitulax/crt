@@ -14,9 +14,10 @@ Crt must be executed at the first time user logs into the interactive shell on t
 The easiest method to ensure this is to execute crt on your shell startup script.
 If you are not planning to use this often you can add the flag `--update` which will sync the crt database but it's slower.
 
+Place this in your shell startup script:
+
 ```console
-# Place in your shell startup script
-$ crt <your shell>
+crt <your shell>
 ```
 
 ## Building
@@ -34,6 +35,12 @@ $ ./result/bin/crt --help
 $ ./deps/build.sh && meson setup build && meson compile -C build
 $ ./build/crt --help
 ```
+
+## Caveat
+
+Fish does not update the history if you run the same command as the previous command,
+and if you run a sequence of commands multiple times, fish will truncate down the history on the fly which decrease the count
+and may get crt without `--update` to count the history as negative, which will be displayed as 0.
 
 ## Note
 

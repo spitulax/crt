@@ -37,6 +37,43 @@ int is_today(time_t timestamp) {
     return timestamp >= day_start;
 }
 
+time_t get_day_start(time_t *timestamp) {
+    struct tm *day_start_tm = localtime(timestamp);
+    if (day_start_tm == NULL) {
+        eprintfln("Could not convert to localtime: %s", strerror(errno));
+        return -1;
+    }
+    day_start_tm->tm_hour = 0;
+    day_start_tm->tm_min  = 0;
+    day_start_tm->tm_sec  = 0;
+    return mktime(day_start_tm);
+}
+
+int final_count(Prog *prog, int count, int past_count) {
+    time_t db_last_updated = 0;
+    int    db_count        = 0;
+    time_t now             = time(NULL);
+    bool   check_ok        = read_db(prog, prog->shell, &db_last_updated, &db_count, true);
+#ifdef DEBUG
+    printfln("now: %ld, last_updated: %ld", now, db_last_updated);
+#endif
+    if (prog->update || !check_ok) {
+        time_t day_start = get_day_start(&now);
+        if (!write_db(prog, prog->shell, day_start, past_count)) return -1;
+    } else {
+        int today = is_today(db_last_updated);
+        if (!today) {
+            if (!write_db(prog, prog->shell, now, count + 1)) return -1;
+        } else if (today < 0) {
+            return -1;
+        }
+    }
+
+    if (!read_db(prog, prog->shell, &db_last_updated, &db_count, false)) return -1;
+    int result = count - db_count;
+    return (result >= 0) ? result : 0;
+}
+
 bool write_db(Prog *prog, Shell shell, time_t last_updated, int count) {
     bool          result  = true;
     sqlite3      *db      = NULL;
