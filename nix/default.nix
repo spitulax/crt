@@ -34,4 +34,12 @@ stdenv.mkDerivation {
   '';
 
   mesonBuildType = if debug then "debug" else "release";
+
+  meta = {
+    description = "Commands Run Today";
+    mainProgram = "crt";
+    homepage = "https://github.com/spitulax/crt";
+    license = lib.licenses.mit;
+    platforms = lib.platforms.linux;
+  };
 }
